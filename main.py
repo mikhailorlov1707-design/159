@@ -1,206 +1,172 @@
-# movie_library.py
+# quote_generator.py
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+import random
 import json
 import os
 
-DATA_FILE = 'movies_data.json'
+DATA_FILE = 'quotes_history.json'
 
-class MovieLibrary:
+# Предопределённый список цитат
+default_quotes = [
+    {"text": "Будь собой; все остальные уже заняты.", "author": "Оскар Уайльд", "topic": "Саморазвитие"},
+    {"text": "Жизнь — это 10% то, что с тобой происходит, и 90% — как ты реагируешь на это.", "author": "Чарльз Р. Свиндолл", "topic": "Мотивация"},
+    {"text": "Лучше сделать и пожалеть, чем не сделать и пожалеть.", "author": "Неизвестный", "topic": "Мотивация"},
+    {"text": "Образование — это самое мощное оружие, которое вы можете использовать, чтобы изменить мир.", "author": "Нельсон Мандела", "topic": "Образование"},
+    {"text": "Только тот, кто рискует уйти далеко, может узнать, как далеко он может зайти.", "author": "Тони Роббинс", "topic": "Мотивация"},
+]
+
+class QuoteGenerator:
     def __init__(self, root):
         self.root = root
-        self.root.title("Movie Library")
-        self.movies = []
+        self.root.title("Random Quote Generator")
+        self.quotes = default_quotes.copy()
+        self.history = []
 
-        self.create_input_fields()
-        self.create_treeview()
-        self.create_filters()
         self.load_data()
 
-    def create_input_fields(self):
-        frame = tk.Frame(self.root)
-        frame.pack(pady=10)
+        self.create_widgets()
 
-        # Название
-        tk.Label(frame, text="Название:").grid(row=0, column=0)
-        self.title_entry = tk.Entry(frame)
-        self.title_entry.grid(row=0, column=1)
+    def create_widgets(self):
+        # Кнопка генерации
+        self.generate_btn = tk.Button(self.root, text="Сгенерировать цитату", command=self.generate_quote)
+        self.generate_btn.pack(pady=10)
 
-        # Жанр
-        tk.Label(frame, text="Жанр:").grid(row=0, column=2)
-        self.genre_entry = tk.Entry(frame)
-        self.genre_entry.grid(row=0, column=3)
+        # Отображение текущей цитаты
+        self.quote_text = tk.Text(self.root, height=4, wrap='word')
+        self.quote_text.pack(padx=10, pady=5)
 
-        # Год выпуска
-        tk.Label(frame, text="Год выпуска:").grid(row=0, column=4)
-        self.year_entry = tk.Entry(frame)
-        self.year_entry.grid(row=0, column=5)
-
-        # Рейтинг
-        tk.Label(frame, text="Рейтинг (0-10):").grid(row=0, column=6)
-        self.rating_entry = tk.Entry(frame)
-        self.rating_entry.grid(row=0, column=7)
-
-        # Кнопка добавления
-        add_btn = tk.Button(frame, text="Добавить фильм", command=self.add_movie)
-        add_btn.grid(row=0, column=8, padx=10)
-
-    def create_treeview(self):
-        columns = ("title", "genre", "year", "rating")
-        self.tree = ttk.Treeview(self.root, columns=columns, show='headings')
-        self.tree.heading('title', text='Название')
-        self.tree.heading('genre', text='Жанр')
-        self.tree.heading('year', text='Год выпуска')
-        self.tree.heading('rating', text='Рейтинг')
-        self.tree.pack(pady=10, fill=tk.BOTH, expand=True)
-
-        delete_btn = tk.Button(self.root, text="Удалить выбранное", command=self.delete_selected)
-        delete_btn.pack(pady=5)
-
-    def create_filters(self):
+        # Фильтры
         filter_frame = tk.Frame(self.root)
         filter_frame.pack(pady=10)
 
-        tk.Label(filter_frame, text="Фильтр по жанру:").grid(row=0, column=0)
-        self.filter_genre_var = tk.StringVar()
-        self.filter_genre_entry = tk.Entry(filter_frame, textvariable=self.filter_genre_var)
-        self.filter_genre_entry.grid(row=0, column=1)
-        filter_genre_btn = tk.Button(filter_frame, text="Фильтр", command=self.filter_by_genre)
-        filter_genre_btn.grid(row=0, column=2)
+        tk.Label(filter_frame, text="Фильтр по автору:").grid(row=0, column=0)
+        self.author_filter_var = tk.StringVar()
+        self.author_filter_entry = tk.Entry(filter_frame, textvariable=self.author_filter_var)
+        self.author_filter_entry.grid(row=0, column=1)
+        btn_filter_author = tk.Button(filter_frame, text="Фильтр", command=self.filter_by_author)
+        btn_filter_author.grid(row=0, column=2)
 
-        tk.Label(filter_frame, text="Фильтр по году:").grid(row=0, column=3)
-        self.filter_year_var = tk.StringVar()
-        self.filter_year_entry = tk.Entry(filter_frame, textvariable=self.filter_year_var)
-        self.filter_year_entry.grid(row=0, column=4)
-        filter_year_btn = tk.Button(filter_frame, text="Фильтр", command=self.filter_by_year)
-        filter_year_btn.grid(row=0, column=5)
+        tk.Label(filter_frame, text="Фильтр по теме:").grid(row=0, column=3)
+        self.topic_filter_var = tk.StringVar()
+        self.topic_filter_entry = tk.Entry(filter_frame, textvariable=self.topic_filter_var)
+        self.topic_filter_entry.grid(row=0, column=4)
+        btn_filter_topic = tk.Button(filter_frame, text="Фильтр", command=self.filter_by_topic)
+        btn_filter_topic.grid(row=0, column=5)
 
-        reset_btn = tk.Button(filter_frame, text="Сбросить фильтр", command=self.load_data)
+        reset_btn = tk.Button(filter_frame, text="Сбросить фильтры", command=self.load_data)
         reset_btn.grid(row=0, column=6, padx=10)
 
-    def add_movie(self):
-        title = self.title_entry.get()
-        genre = self.genre_entry.get()
-        year_str = self.year_entry.get()
-        rating_str = self.rating_entry.get()
+        # История
+        tk.Label(self.root, text="История сгенерированных цитат:").pack()
+        self.history_listbox = tk.Listbox(self.root, width=80, height=10)
+        self.history_listbox.pack(padx=10, pady=5)
 
-        # Валидация
-        if not year_str.isdigit():
-            messagebox.showerror("Ошибка", "Год должен быть числом")
-            return
-        year = int(year_str)
+    def generate_quote(self):
+        quote = random.choice(self.quotes)
+        self.display_quote(quote)
+        self.history.append(quote)
+        self.update_history()
 
-        if not self.is_valid_rating(rating_str):
-            messagebox.showerror("Ошибка", "Рейтинг должен быть от 0 до 10")
-            return
-        rating = float(rating_str)
+    def display_quote(self, quote):
+        self.quote_text.delete('1.0', tk.END)
+        display_text = f'"{quote["text"]}"\n— {quote["author"]} ({quote["topic"]})'
+        self.quote_text.insert(tk.END, display_text)
 
-        record = {
-            "title": title,
-            "genre": genre,
-            "year": year,
-            "rating": rating
-        }
-        self.movies.append(record)
+    def update_history(self):
         self.save_data()
-        self.load_data()
+        self.refresh_history()
 
-        # Очистка полей
-        self.title_entry.delete(0, tk.END)
-        self.genre_entry.delete(0, tk.END)
-        self.year_entry.delete(0, tk.END)
-        self.rating_entry.delete(0, tk.END)
+    def refresh_history(self):
+        self.history_listbox.delete(0, tk.END)
+        for q in self.history:
+            self.history_listbox.insert(tk.END, f'"{q["text"]}" — {q["author"]} ({q["topic"]})')
 
-    def delete_selected(self):
-        selected_item = self.tree.selection()
-        if not selected_item:
+    def filter_by_author(self):
+        author = self.author_filter_var.get().strip()
+        if not author:
+            self.load_data()
             return
-        values = self.tree.item(selected_item[0], 'values')
-        self.movies = [m for m in self.movies if not (m['title'] == values[0] and m['genre'] == values[1] and str(m['year']) == values[2] and str(m['rating']) == values[3])]
-        self.save_data()
-        self.load_data()
+        filtered = [q for q in self.quotes if q["author"] == author]
+        self.display_filtered(filtered)
 
-    def is_valid_rating(self, rating_str):
-        try:
-            rating = float(rating_str)
-            return 0 <= rating <= 10
-        except ValueError:
-            return False
+    def filter_by_topic(self):
+        topic = self.topic_filter_var.get().strip()
+        if not topic:
+            self.load_data()
+            return
+        filtered = [q for q in self.quotes if q["topic"] == topic]
+        self.display_filtered(filtered)
+
+    def display_filtered(self, filtered_quotes):
+        self.quotes = filtered_quotes
+        # Можно оставить текущую историю без фильтрации
+        # или очистить текущие отображения цитат
+        # В данном случае, чтобы не мешать генерации, ничего не делаем
+        # Можно реализовать отдельное отображение, если нужно
 
     def load_data(self):
         if os.path.exists(DATA_FILE):
             with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                self.movies = json.load(f)
+                data = json.load(f)
+                self.history = data.get('history', [])
+                self.quotes = data.get('quotes', default_quotes)
         else:
-            self.movies = []
-
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-
-        for m in self.movies:
-            self.tree.insert('', tk.END, values=(m['title'], m['genre'], m['year'], m['rating']))
+            self.history = []
+            self.quotes = default_quotes.copy()
+        self.refresh_history()
 
     def save_data(self):
+        data = {
+            'quotes': self.quotes,
+            'history': self.history
+        }
         with open(DATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(self.movies, f, ensure_ascii=False, indent=4)
-
-    def filter_by_genre(self):
-        genre = self.filter_genre_var.get()
-        filtered = [m for m in self.movies if m['genre'] == genre]
-        self.display_filtered(filtered)
-
-    def filter_by_year(self):
-        year_str = self.filter_year_var.get()
-        if not year_str.isdigit():
-            messagebox.showerror("Ошибка", "Год должен быть числом")
-            return
-        year = int(year_str)
-        filtered = [m for m in self.movies if m['year'] == year]
-        self.display_filtered(filtered)
-
-    def display_filtered(self, filtered_movies):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        for m in filtered_movies:
-            self.tree.insert('', tk.END, values=(m['title'], m['genre'], m['year'], m['rating']))
-
+            json.dump(data, f, ensure_ascii=False, indent=4)
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = MovieLibrary(root)
+    app = QuoteGenerator(root)
     root.mainloop()
+
 # -------------------------------------------
 # .gitignore
 # -------------------------------------------
 # Python cache and pyc files
-__pycache__
+__pycach
+
+
+
+
 # IDE folders
+
+
+
 # Data file
-movies_data.json
+quotes_history.json
+
 # -------------------------------------------
 # README.md
 # -------------------------------------------
 #
-# # Movie Library
+# # Random Quote Generator
 #
 # Автор: Ваша Фамилия Имя
 #
 # ## Описание
-# Графическое приложение для хранения информации о фильмах. Позволяет добавлять фильмы, фильтровать по жанру и году, сохранять/загружать данные в JSON.
+# Графическое приложение для генерации случайных цитат. Позволяет получать случайную цитату, фильтровать по автору и теме, а также сохранять историю генераций.
 #
 # ## Как запустить
 # 1. Скопируйте файлы в папку.
 # 2. Убедитесь, что установлен Python 3.
 # 3. Запустите командой:
 # ```bash
-# python movie_library.py
+# python quote_generator.py
 # ```
 #
 # ## Использование
-# - Введите название, жанр, год и рейтинг (от 0 до 10).
-# - Нажмите «Добавить фильм».
-# - Используйте фильтры по жанру и году и кнопку «Сбросить фильтр» для просмотра.
-# - Для удаления выберите фильм и нажмите «Удалить выбранное».
-#
-# Данные сохраняются в файле `movies_data.json`.
+# - Нажимайте «Сгенерировать цитату» для получения случайной цитаты.
+# - Используйте фильтры по автору и теме для поиска.
+# - Посмотрите историю сгенерированных цитат.
+# - Все данные сохраняются в файле `quotes_history.json`.
